@@ -10,11 +10,19 @@ from pydantic import BaseModel, Field
 load_dotenv()
 BASE = Path(__file__).resolve().parent
 DB = BASE / 'yuki_memory.db'
-MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini')
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY')) if os.getenv('OPENAI_API_KEY') else None
-app = FastAPI(title='YUKI Personal Assistant', version='0.1.0')
+PROVIDER = os.getenv('YUKI_PROVIDER', 'ollama').lower()
+MODEL = os.getenv('YUKI_MODEL', 'qwen2.5:3b')
+if PROVIDER == 'ollama':
+    client = OpenAI(api_key='ollama-local', base_url=os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434/v1'))
+elif PROVIDER == 'openai':
+    key = os.getenv('OPENAI_API_KEY')
+    client = OpenAI(api_key=key) if key else None
+else:
+    raise RuntimeError('YUKI_PROVIDER must be ollama or openai')
+
+app = FastAPI(title='YUKI Personal Assistant', version='0.2.0')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=False, allow_methods=['*'], allow_headers=['*'])
-SYSTEM = '''You are YUKI, a helpful personal AI assistant. Speak naturally in Tamil Nadu Tamil-English mix (Tanglish) when the user does. Be clear, warm, honest and practical. Do not pretend to be human or have a body. Use web search for current facts when available and explain uncertainty. Consider explicit user correction notes, but do not claim to retrain your model or know everything. Ask before sensitive or irreversible actions. Never send messages, spend money, or share private data without clear confirmation. Keep financial content educational for teen users; do not encourage real-money trading.'''
+SYSTEM = """You are YUKI, a helpful personal AI assistant. Speak naturally in Tamil Nadu Tamil-English mix (Tanglish) when the user does. Be clear, warm, honest and practical. Do not pretend to be human or have a body. Explain uncertainty and do not invent facts. Consider explicit user correction notes, but do not claim to retrain your model or know everything. Ask before sensitive or irreversible actions. Never send messages, spend money, or share private data without clear confirmation."""
 
 def connect():
     c=sqlite3.connect(DB)
@@ -26,19 +34,20 @@ class Chat(BaseModel): message: str = Field(min_length=1, max_length=8000)
 class Feedback(BaseModel): note: str = Field(min_length=1, max_length=2000)
 
 @app.get('/health')
-def health(): return {'ok':True,'service':'YUKI','api_key_configured':client is not None}
+def health():
+    return {'ok':True,'service':'YUKI','provider':PROVIDER,'model':MODEL,'ai_configured':client is not None}
 
 @app.post('/chat')
 def chat(req: Chat):
-    if client is None: raise HTTPException(503,'Add OPENAI_API_KEY to backend .env on the server.')
+    if client is None: raise HTTPException(503,'OpenAI key is not configured. Use YUKI_PROVIDER=ollama for local mode.')
     c=connect()
     try:
         history=c.execute('SELECT role,content FROM messages ORDER BY id DESC LIMIT 12').fetchall()[::-1]
         notes=c.execute('SELECT note FROM feedback ORDER BY id DESC LIMIT 12').fetchall()
         prompt=SYSTEM + ('\nUser-approved correction notes:\n'+'\n'.join('- '+n[0] for n in notes) if notes else '')
         inputs=[{'role':'system','content':prompt}]+[{'role':r,'content':t} for r,t in history]+[{'role':'user','content':req.message}]
-        response=client.responses.create(model=MODEL,input=inputs,tools=[{'type':'web_search_preview'}])
-        answer=response.output_text or 'Sorry, I could not answer that.'
+        response=client.chat.completions.create(model=MODEL,messages=inputs)
+        answer=response.choices[0].message.content or 'Sorry, I could not answer that.'
         c.execute('INSERT INTO messages(role,content) VALUES(?,?)',('user',req.message))
         c.execute('INSERT INTO messages(role,content) VALUES(?,?)',('assistant',answer)); c.commit()
         return {'reply':answer}
