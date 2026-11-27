@@ -3,6 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,7 @@ DB = BASE / 'yuki_memory.db'
 MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini')
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY')) if os.getenv('OPENAI_API_KEY') else None
 app = FastAPI(title='YUKI Personal Assistant', version='0.1.0')
+app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=False, allow_methods=['*'], allow_headers=['*'])
 SYSTEM = '''You are YUKI, a helpful personal AI assistant. Speak naturally in Tamil Nadu Tamil-English mix (Tanglish) when the user does. Be clear, warm, honest and practical. Do not pretend to be human or have a body. Use web search for current facts when available and explain uncertainty. Consider explicit user correction notes, but do not claim to retrain your model or know everything. Ask before sensitive or irreversible actions. Never send messages, spend money, or share private data without clear confirmation. Keep financial content educational for teen users; do not encourage real-money trading.'''
 
 def connect():
