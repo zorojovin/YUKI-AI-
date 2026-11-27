@@ -40,5 +40,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
   val intent=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply{putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);putExtra(RecognizerIntent.EXTRA_LANGUAGE,"ta-IN");putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"ta-IN")};recognizer?.startListening(intent)
  }
  private fun sendToPage(method:String,value:String){val safe=org.json.JSONObject.quote(value);runOnUiThread{web.evaluateJavascript("window.$method && window.$method($safe)",null)}}
+ override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==41 && grantResults.isNotEmpty() && grantResults[0]==PackageManager.PERMISSION_GRANTED) startListening() else if(requestCode==41) sendToPage("onYukiError","Microphone permission was not granted")}
  override fun onDestroy(){recognizer?.destroy();tts?.stop();tts?.shutdown();web.destroy();super.onDestroy()}
 }
